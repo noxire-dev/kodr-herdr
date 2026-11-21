@@ -101,7 +101,7 @@ programs.programs = { ...(programs.programs ?? {}), "claude-kodr": { name: "Clau
 fs.writeFileSync(programsFile, JSON.stringify(programs, null, 2));
 
 // Kodr's keys, only while the kodr layout shows, and only where the person hasn't bound the key there.
-const KEYS = { "ctrl-shift-j": "kodr-pane.toggle", "ctrl-shift-r": "kodr-pane.review", "ctrl-shift-m": "kodr-chat.modes", "ctrl-shift-h": "mod.open:kodr-sessions", "ctrl-shift-g": "kodr-pane.mission", "ctrl-shift-u": "mod.open:kodr-preview" };
+const KEYS = JSON.parse(fs.readFileSync(path.join(root, "herdr", "keys.json"), "utf8"))["layout:kodr"]; // the shared layout folder ships the same file
 const keysFile = path.join(app, "keys.json");
 let keys = null;
 try { keys = JSON.parse(fs.readFileSync(keysFile, "utf8")); } catch {}

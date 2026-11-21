@@ -90,7 +90,9 @@ export default class KodrMission extends View {
     this.acceptInput = InputState.new({ placeholder: "git pull && npm run deploy" });
     cx.spawn(async (cx) => {
       this.config = JSON.parse((await readTextFile(`${home()}/.kodr-herdr/config.json`).catch(() => null)) ?? "null");
+      this.configRead = true; // the layout and mods can arrive without Kodr's Node side (shared on herdr.dev)
       this.tick(cx);
+      cx.notify();
     });
     cx.timer.every(2000, (cx) => this.tick(cx));
     // "kodr-mission.open-<N>" opens that Rinai card, "kodr-mission.board" goes back, "kodr-mission.settings" the repo settings.
@@ -1004,6 +1006,9 @@ export default class KodrMission extends View {
 
   render() {
     const t = theme();
+    if (this.configRead && !this.config) return v_flex().id("kodr-mission").size_full().bg(t.background).text_color(t.foreground)
+      .child(h_flex().h(42).flex_none().pl(16).items_center().child(div().text_size(13).font_medium().child("Mission")))
+      .child(this.message(t, "Kodr's tools aren't installed: clone github.com/noxire-dev/kodr-herdr and run node bin/install.mjs. Then switch spaces or reopen Mission."));
     const card = this.selected !== null && Object.values(this.board?.columns ?? {}).flat().find((c) => c.number === this.selected);
     const todo = !card && this.todoSel != null && this.todos?.cards.find((c) => c.id === this.todoSel);
     const settings = this.settingsOpen && !card && !todo && Boolean(this.board);

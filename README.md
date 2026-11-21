@@ -65,6 +65,9 @@ To remove Kodr, run `node bin/install.mjs --uninstall`. It takes Kodr's hooks ou
 up first), and its mods, theme, layout, menu entry and keys out of Herdr. Your own entries stay. Kodr's state in
 `~/.kodr-herdr` stays too; delete that folder yourself.
 
+The `kodr/` folder in this repo is the layout as herdr.dev shares it (layouts, mods, keys, theme, `RECIPE.md`,
+`preview.png`). Its mods still need the Node side above: install with `node bin/install.mjs`, not by copying the folder.
+
 ## Use
 
 Switch to the `kodr` layout, start **Claude (Kodr)** from `+`, and press `Ctrl+Shift+J` to flip between the terminal

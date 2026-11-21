@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Publishes Kodr: HEAD's committed files, minus the working notes between sessions and the person, as one new commit
 // on the `public` branch (its own history, nothing from the local one), authored with the GitHub noreply address.
+// It also lays out `kodr/` the way herdr.dev shares a layout (a folder shaped like Herdr's home, with RECIPE.md and
+// preview.png); the repo's `herdr-layout` topic lists it at herdr.dev/layouts.
 //   node bin/publish.mjs "<message>"          builds the commit and prints what changed
 //   node bin/publish.mjs "<message>" --push   …and pushes it to origin's main
 //   node bin/publish.mjs --self-check
@@ -13,6 +15,15 @@ import { fileURLToPath } from "node:url";
 
 // Local only: handoffs, what's waiting on the person, and the briefs written for agents.
 export const published = (file) => !/^(HANDOFF\.md|NEEDS-YOU\.md|docs\/brief-[^/]+\.md)$/.test(file);
+// Where a repo file goes in the shared layout folder kodr/, or null: the layout, its theme and keys, the recipe and
+// preview, and every mod (checks and editor typings stay out).
+export function inLayout(file) {
+  const fixed = { "herdr/layout-kodr.json": "layouts/kodr.json", "herdr/themes/kodr-zed.json": "themes/kodr-zed.json",
+    "herdr/keys.json": "keys.json", "herdr/RECIPE.md": "RECIPE.md", "herdr/preview.png": "preview.png" };
+  if (fixed[file]) return `kodr/${fixed[file]}`;
+  const m = /^mod\/(kodr-[\w-]+)\/(.+)$/.exec(file);
+  return m && !/\.check\.mjs$/.test(m[2]) ? `kodr/mods/${m[1]}/${m[2]}` : null;
+}
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const git = (args, opts = {}) => execFileSync("git", args, { cwd: root, encoding: "utf8", ...opts }).trim();
@@ -21,6 +32,11 @@ if (process.argv[2] === "--self-check") {
   for (const f of ["HANDOFF.md", "NEEDS-YOU.md", "docs/brief-crew.md"]) assert.equal(published(f), false, f);
   for (const f of ["README.md", "AGENTS.md", "docs/reference.md", "docs/screenshots/crew-done.png", "mod/kodr-chat/main.js", "x/HANDOFF.md"])
     assert.equal(published(f), true, f);
+  assert.equal(inLayout("herdr/layout-kodr.json"), "kodr/layouts/kodr.json");
+  assert.equal(inLayout("herdr/RECIPE.md"), "kodr/RECIPE.md");
+  assert.equal(inLayout("mod/kodr-chat/main.js"), "kodr/mods/kodr-chat/main.js");
+  assert.equal(inLayout("mod/kodr-chat/turns.check.mjs"), null);
+  assert.equal(inLayout("feed/kodr-feed.mjs"), null);
   console.log("publish: ok");
 } else {
   const message = process.argv[2];
@@ -33,9 +49,11 @@ if (process.argv[2] === "--self-check") {
   try {
     // The public tree is exactly HEAD's published files: clear it, then write each one from the commit.
     for (const f of fs.readdirSync(dir)) if (f !== ".git") fs.rmSync(path.join(dir, f), { recursive: true, force: true });
+    const put = (to, bytes) => { fs.mkdirSync(path.join(dir, path.dirname(to)), { recursive: true }); fs.writeFileSync(path.join(dir, to), bytes); };
     for (const f of git(["ls-tree", "-r", "--name-only", "HEAD"]).split("\n").filter(published)) {
-      fs.mkdirSync(path.join(dir, path.dirname(f)), { recursive: true });
-      fs.writeFileSync(path.join(dir, f), execFileSync("git", ["show", `HEAD:${f}`], { cwd: root, maxBuffer: 64 << 20 }));
+      const bytes = execFileSync("git", ["show", `HEAD:${f}`], { cwd: root, maxBuffer: 64 << 20 });
+      put(f, bytes);
+      if (inLayout(f)) put(inLayout(f), bytes);
     }
     git(["-C", dir, "add", "-A"]);
     if (!git(["-C", dir, "status", "--porcelain"])) console.log("nothing changed since the last publish");

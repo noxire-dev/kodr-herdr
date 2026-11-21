@@ -130,6 +130,8 @@ export default class KodrPane extends View {
 
   // Terminal → Chat: the chat opens beside, then the terminal is parked so the chat has its spot.
   toChat(p, cx) {
+    // The layout can be installed without Kodr's Node side (from herdr.dev): say so instead of failing.
+    if (!this.config) return notify({ title: "Chat needs Kodr's tools", body: "Kodr's tools aren't installed: clone github.com/noxire-dev/kodr-herdr and run node bin/install.mjs.", level: "error" });
     const terminal = p.terminal;
     const open = terminals().find((x) => x.address === terminal)?.labels?.[LABEL];
     if (open && panes().some((x) => x.pane === open)) { run("pane.focus", { pane: open }); return; }

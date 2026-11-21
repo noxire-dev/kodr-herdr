@@ -1,0 +1,10 @@
+{
+  "layout:kodr": {
+    "ctrl-shift-j": "kodr-pane.toggle",
+    "ctrl-shift-r": "kodr-pane.review",
+    "ctrl-shift-m": "kodr-chat.modes",
+    "ctrl-shift-h": "mod.open:kodr-sessions",
+    "ctrl-shift-g": "kodr-pane.mission",
+    "ctrl-shift-u": "mod.open:kodr-preview"
+  }
+}
