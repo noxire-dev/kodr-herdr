@@ -1,3 +1,5 @@
 node_modules/
 mod/*/gpui-kit.d.ts
 mod/*/jsconfig.json
+browser/mod/*/gpui-kit.d.ts
+browser/mod/*/jsconfig.json

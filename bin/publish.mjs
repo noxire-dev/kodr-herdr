@@ -5,6 +5,7 @@
 // preview.png); the repo's `herdr-layout` topic lists it at herdr.dev/layouts.
 //   node bin/publish.mjs "<message>"          builds the commit and prints what changed
 //   node bin/publish.mjs "<message>" --push   …and pushes it to origin's main
+//   node bin/publish.mjs "<message>" --browser [--push]   the same for browser/, as noxire-dev/herdr-browser
 //   node bin/publish.mjs --self-check
 import fs from "node:fs";
 import os from "node:os";
@@ -21,8 +22,17 @@ export function inLayout(file) {
   const fixed = { "herdr/layout-kodr.json": "layouts/kodr.json", "herdr/themes/kodr-zed.json": "themes/kodr-zed.json",
     "herdr/keys.json": "keys.json", "herdr/RECIPE.md": "RECIPE.md", "herdr/preview.png": "preview.png" };
   if (fixed[file]) return `kodr/${fixed[file]}`;
-  const m = /^mod\/(kodr-[\w-]+)\/(.+)$/.exec(file);
+  const m = /^(?:mod|browser\/mod)\/((?:kodr|herdr)-[\w-]+)\/(.+)$/.exec(file);
   return m && !/\.check\.mjs$/.test(m[2]) ? `kodr/mods/${m[1]}/${m[2]}` : null;
+}
+// herdr-browser's own repo (--browser): browser/ at its root, plus herdr-app/ shaped the way herdr.dev shares a mod.
+export function inBrowser(file) {
+  const m = /^browser\/(.+)$/.exec(file);
+  if (!m) return [];
+  const out = [m[1]];
+  if (m[1] === "RECIPE.md" || m[1] === "preview.png") out.push(`herdr-app/${m[1]}`);
+  if (/^mod\/herdr-browser\//.test(m[1]) && !/\.check\.mjs$/.test(m[1])) out.push(`herdr-app/mods/${m[1].slice(4)}`);
+  return out;
 }
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -37,23 +47,33 @@ if (process.argv[2] === "--self-check") {
   assert.equal(inLayout("mod/kodr-chat/main.js"), "kodr/mods/kodr-chat/main.js");
   assert.equal(inLayout("mod/kodr-chat/turns.check.mjs"), null);
   assert.equal(inLayout("feed/kodr-feed.mjs"), null);
+  assert.equal(inLayout("browser/mod/herdr-browser/main.js"), "kodr/mods/herdr-browser/main.js");
+  assert.equal(inLayout("browser/browser.mjs"), null);
+  assert.deepEqual(inBrowser("browser/browser.mjs"), ["browser.mjs"]);
+  assert.deepEqual(inBrowser("browser/mod/herdr-browser/main.js"), ["mod/herdr-browser/main.js", "herdr-app/mods/herdr-browser/main.js"]);
+  assert.deepEqual(inBrowser("browser/mod/herdr-browser/input.check.mjs"), ["mod/herdr-browser/input.check.mjs"]);
+  assert.deepEqual(inBrowser("browser/RECIPE.md"), ["RECIPE.md", "herdr-app/RECIPE.md"]);
+  assert.deepEqual(inBrowser("mod/kodr-chat/main.js"), []);
   console.log("publish: ok");
 } else {
   const message = process.argv[2];
-  if (!message || message.startsWith("--")) throw new Error('usage: node bin/publish.mjs "<message>" [--push]');
+  if (!message || message.startsWith("--")) throw new Error('usage: node bin/publish.mjs "<message>" [--push] [--browser]');
+  const browser = process.argv.includes("--browser");
   const user = JSON.parse(execFileSync("gh", ["api", "user"], { encoding: "utf8" }));
   const author = [`user.name=${user.login}`, `user.email=${user.id}+${user.login}@users.noreply.github.com`];
-  const dir = path.join(os.tmpdir(), `kodr-public-${process.pid}`);
-  const has = git(["branch", "--list", "public"]);
-  git(has ? ["worktree", "add", "--quiet", dir, "public"] : ["worktree", "add", "--quiet", "--orphan", "-b", "public", dir]);
+  const branch = browser ? "browser-public" : "public";
+  const dir = path.join(os.tmpdir(), `kodr-${branch}-${process.pid}`);
+  const has = git(["branch", "--list", branch]);
+  git(has ? ["worktree", "add", "--quiet", dir, branch] : ["worktree", "add", "--quiet", "--orphan", "-b", branch, dir]);
   try {
     // The public tree is exactly HEAD's published files: clear it, then write each one from the commit.
     for (const f of fs.readdirSync(dir)) if (f !== ".git") fs.rmSync(path.join(dir, f), { recursive: true, force: true });
     const put = (to, bytes) => { fs.mkdirSync(path.join(dir, path.dirname(to)), { recursive: true }); fs.writeFileSync(path.join(dir, to), bytes); };
     for (const f of git(["ls-tree", "-r", "--name-only", "HEAD"]).split("\n").filter(published)) {
+      const to = browser ? inBrowser(f) : [f, inLayout(f)].filter(Boolean);
+      if (!to.length) continue;
       const bytes = execFileSync("git", ["show", `HEAD:${f}`], { cwd: root, maxBuffer: 64 << 20 });
-      put(f, bytes);
-      if (inLayout(f)) put(inLayout(f), bytes);
+      for (const t of to) put(t, bytes);
     }
     git(["-C", dir, "add", "-A"]);
     if (!git(["-C", dir, "status", "--porcelain"])) console.log("nothing changed since the last publish");
@@ -61,7 +81,8 @@ if (process.argv[2] === "--self-check") {
       git(["-C", dir, "-c", author[0], "-c", author[1], "commit", "--quiet", "-m", message]);
       console.log(git(["-C", dir, "log", "-1", "--stat", "--format=%h %s (%an <%ae>)"]));
     }
-    if (process.argv.includes("--push")) console.log(git(["-C", dir, "push", "origin", "public:main"], { stdio: ["ignore", "pipe", "pipe"] }) || "pushed public -> origin/main");
+    const remote = browser ? "https://github.com/noxire-dev/herdr-browser.git" : "origin";
+    if (process.argv.includes("--push")) console.log(git(["-C", dir, "push", remote, `${branch}:main`], { stdio: ["ignore", "pipe", "pipe"] }) || `pushed ${branch} -> ${remote} main`);
   } finally {
     git(["worktree", "remove", "--force", dir]);
   }

@@ -5,14 +5,14 @@ structured chat you can switch to in the same pane, plus what shepherdr doesn't 
 checkpoint per turn, checks Kodr runs from the base commit (the agent can't edit them), and a
 review queue. Node only, no Python or shell: it must run on Windows and macOS.
 
-Scope on purpose: chat (permission, question and plan cards, tasks, diffs, / $ @ completion), the Terminal | Chat switch, checkpoints, checks, review, and Preview (dev servers in the terminals, opened in Deft).
+Scope on purpose: chat (permission, question and plan cards, tasks, diffs, / $ @ completion), the Terminal | Chat switch, checkpoints, checks, review, Preview (dev servers in the terminals) and the Browser pane (`browser/`: herdr-browser, a headless Chromium drawn from CDP frames, a window per pane with tabs, which Kodr's Claude drives through the `herdr-browser` MCP server, `browser/tools.mjs` over CDP port 9333). `browser/` is also its own repo, noxire-dev/herdr-browser (`node bin/publish.mjs --browser`): keep it free of Kodr (its own config in `~/.herdr-browser`, its own `install.mjs`, which Kodr's install calls).
 Not tasks, web app, voice or autopilot.
 
 ## Pieces
 - `hooks/kodr-hook.mjs`: Claude hooks, loaded only via `claude --settings ~/.kodr-herdr/claude-settings.json`
   (never the user's ~/.claude/settings.json). `kodr-verify.mjs` runs checks detached.
 - `feed/kodr-feed.mjs`: transcript tail → chat rows (the chat mod execs it).
-- `mod/kodr-chat`, `mod/kodr-pane` (pane header with the switch), `mod/kodr-agents` (herdr's agents list + each agent's stage; re-copy when herdr updates `agents`), `mod/kodr-review`.
+- `mod/kodr-chat`, `mod/kodr-pane` (pane header with the switch), `mod/kodr-agents` (herdr's agents list + each agent's stage; re-copy when herdr updates `agents`), `mod/kodr-review`, `browser/mod/herdr-browser` (frames go to `~/.config/herdr-app/mods/herdr-browser-frames/`: herdr only refreshes a changed image under `mods/`, skips dot-folders, and reloads a mod when its own folder changes; each frame gets a new name, since rewriting a shown file races herdr's reload, and three are stacked: the newest over one loading over one that stayed on screen 1 s, so loaded. herdr evicts decoded images over a memory budget, so a frame SVG declares half its size (it still rasterizes sharp) and frames are capped at 4 a second, or the frames on screen get evicted and the pane blinks).
 - `lib/`: checkpoint, verify, per-terminal state in `~/.kodr-herdr/t/<terminal>/` (see lib/store.mjs).
 - `herdr/`: the Zed-style theme and the `kodr` layout (the person's `main` layout is never edited).
 
@@ -28,7 +28,7 @@ HC_TERMINAL_ID set, hc wraps the text in `<hc from=…>`, which a shell can't ru
 in the person's tabs, and close it after: they may be typing there.
 
 ## Checks
-`node lib/checkpoint.mjs`, `node lib/verify.mjs`, `node feed/kodr-feed.mjs --self-check`, `node hooks/kodr-hook.check.mjs`, `node mod/kodr-chat/blocks.check.mjs`, `node mod/kodr-chat/turns.check.mjs`, `node feed/kodr-mission.mjs --self-check`, `node mod/kodr-mission/board.check.mjs`, `node mod/kodr-pane/attention.check.mjs`, `node feed/kodr-ports.mjs --self-check`, `node lib/tasks.mjs`, `node feed/kodr-yap.mjs --self-check`, `node feed/kodr-stages.mjs --self-check`, `node feed/kodr-todo.mjs --self-check`, `node feed/kodr-crew.mjs --self-check`, `node bin/publish.mjs --self-check`, and `herdr-app check mod/<name>` for each mod.
+`node lib/checkpoint.mjs`, `node lib/verify.mjs`, `node feed/kodr-feed.mjs --self-check`, `node hooks/kodr-hook.check.mjs`, `node mod/kodr-chat/blocks.check.mjs`, `node mod/kodr-chat/turns.check.mjs`, `node feed/kodr-mission.mjs --self-check`, `node mod/kodr-mission/board.check.mjs`, `node mod/kodr-pane/attention.check.mjs`, `node feed/kodr-ports.mjs --self-check`, `node lib/tasks.mjs`, `node feed/kodr-yap.mjs --self-check`, `node feed/kodr-stages.mjs --self-check`, `node feed/kodr-todo.mjs --self-check`, `node feed/kodr-crew.mjs --self-check`, `node feed/kodr-complete.mjs --self-check`, `node feed/kodr-resume.mjs --self-check`, `node feed/kodr-alive.mjs --self-check`, `node browser/mod/herdr-browser/input.check.mjs`, `node browser/browser.mjs --self-check`, `node browser/tools.check.mjs`, `node bin/publish.mjs --self-check`, and `herdr-app check mod/<name>` for each mod.
 
 ## Surfaces a change must hit
 Windows and macOS paths; the terminal and chat views of the same session; herdr's Agents list (a

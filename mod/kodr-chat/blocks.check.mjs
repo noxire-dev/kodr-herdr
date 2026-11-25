@@ -37,9 +37,12 @@ console.log("blocks ok");
 import { hits, markMarkdown, rowText } from "./find.js";
 const rows = [{ kind: "user", text: "Where is the Fan curve?" }, { kind: "tool", summary: "Grep FanCurve", output: "app/Fans.cs" },
   { kind: "end", ms: 1 }, { kind: "text", text: "no match here" }, { kind: "thinking", text: "fan speed" }];
-assert.deepEqual(hits(rows, "fan"), [0, 1, 4]);
-assert.deepEqual(hits(rows, "a.c"), []); // the query is literal, not a pattern
-assert.deepEqual(hits(rows, "Fans.cs"), [1]);
+const at = (q, r = rows) => hits(r, q).map(({ i, k }) => `${i}.${k}`);
+assert.deepEqual(at("fan"), ["0.0", "1.0", "4.0"]);
+// Each match counts, a code block's don't (they aren't marked): "fan fan" + a fenced fan = 2 hits.
+assert.deepEqual(at("fan", [{ kind: "text", text: "fan and fan\n```\nfan\n```" }]), ["0.0", "0.1"]);
+assert.deepEqual(at("a.c"), []); // the query is literal, not a pattern
+assert.deepEqual(at("Fans.cs"), ["1.0"]);
 assert.deepEqual(hits(rows, ""), []);
 assert.equal(rowText({ kind: "end" }), "");
 const M = (s) => `<mark style="background-color: c">${s}</mark>`;
@@ -48,4 +51,22 @@ assert.equal(markMarkdown("- **fan** item", "fan", "c"), `- **${M("fan")}** item
 assert.equal(markMarkdown("see `fan.js` and [fan](http://x/fan)", "fan", "c"), `see ${M("`fan.js`")} and [${M("fan")}](http://x/fan)`);
 assert.equal(markMarkdown("```\nfan\n```\nfan", "fan", "c"), `\`\`\`\nfan\n\`\`\`\n${M("fan")}`);
 assert.equal(markMarkdown("| fan |", "fan", "c"), "| fan |");
+// The current match (numbered across the row from start) is the only bright one.
+const C = (x) => `<mark style="background-color: #f59e0bcc">${x}</mark>`;
+assert.equal(markMarkdown("fan fan", "fan", "c", 1), `${M("fan")} ${C("fan")}`);
+assert.equal(markMarkdown("fan", "fan", "c", 2, 2), C("fan"));
 console.log("blocks + find: ok");
+
+// A terminal draft: the input box between the last two rules; wrapped lines join, real line breaks stay.
+import { draftOf, clearKeys } from "./draft.js";
+const RULE = "─".repeat(30);
+const box = (...l) => ["● Earlier.", "", RULE, ...l, RULE, "  ⏵⏵ bypass permissions on"].join("\n");
+assert.deepEqual(draftOf(box("❯ ")), { text: "", lines: 0 });
+assert.deepEqual(draftOf(box('❯ Try "fix lint errors"')), { text: "", lines: 0 });
+assert.deepEqual(draftOf(box("❯ hello draft")), { text: "hello draft", lines: 1 });
+assert.deepEqual(draftOf(box("❯ first", "  second", "  " + "w".repeat(27), "  rest")), { text: "first\nsecond\n" + "w".repeat(27) + " rest", lines: 4 });
+assert.deepEqual(draftOf("❯ no box here"), { text: "", lines: 0 });
+assert.deepEqual(draftOf(box(" Do you want to proceed?", " ❯ 1. Yes")), { text: "", lines: 0 }); // a dialog, not the input
+assert.deepEqual(clearKeys(1), ["ctrl+e", "ctrl+u"]);
+assert.deepEqual(clearKeys(3), ["ctrl+e", "ctrl+u", "backspace", "ctrl+u", "backspace", "ctrl+u"]);
+console.log("draft: ok");

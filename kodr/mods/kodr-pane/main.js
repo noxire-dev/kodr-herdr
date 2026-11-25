@@ -10,11 +10,13 @@ import { attention, allowed, canChat, titleOf } from "./attention.js";
 
 const CHAT = "kodr-chat";
 const LABEL = "kodr.chat";
+const SHELL = /^(pwsh|powershell|cmd|bash|zsh|fish|sh|nu)(.exe)?$/i;
 const kodrHome = () => `${home()}/.kodr-herdr`;
 let lastSwap = 0; // shared by every header copy: one swap at a time
 const seen = new Map(); // agent statuses, for desktop notifications (one watcher for all copies)
 let lastWatch = 0;
 let lastMission = 0;
+let resumeRan = false; // feed/kodr-resume.mjs, once per start: Claudes a lost terminal dropped come back
 
 function icon(p, size, color) {
   if (!p?.icon) return null;
@@ -41,6 +43,12 @@ export default class KodrPane extends View {
     cx.spawn(async (cx) => {
       this.config = JSON.parse((await readTextFile(`${kodrHome()}/config.json`).catch(() => null)) ?? "null");
       cx.notify();
+      if (!resumeRan && this.config?.node) {
+        resumeRan = true;
+        const r = await exec(this.config.node, [`${this.config.root}/feed/kodr-resume.mjs`], { timeout: 30_000 }).catch(() => null);
+        const n = JSON.parse(r?.stdout || "{}").resumed?.length ?? 0;
+        if (n) notify({ title: "Kodr", body: `Resumed ${n} Claude session${n > 1 ? "s" : ""} herdr lost`, level: "info" });
+      }
     });
     this.check(cx);
     cx.timer.every(3000, (cx) => this.check(cx));
@@ -66,10 +74,15 @@ export default class KodrPane extends View {
           run("layout.show", { id: "panel" });
           continue;
         }
+        // "kodr-pane.browser": a blank Browser pane beside the focused one.
+        if (c === "browser") {
+          if (p?.focused) run("pane.split", { direction: "right", pane: p.pane, mod: "herdr-browser", props: { url: "about:blank", key: Date.now().toString(36) } });
+          continue;
+        }
         // A copy that just appeared (the swap's new pane) mustn't swap straight back.
         if (c !== "toggle" || !p?.focused || Date.now() - this.born < 1500 || Date.now() - lastSwap < 1500) continue;
         if (p.mod === CHAT) this.toTerminal(p.pane, cx);
-        else if (canChat(p, this.ended)) this.toChat(p, cx);
+        else if (canChat(p, this.ended || this.goneNow)) this.toChat(p, cx);
       }
     });
   }
@@ -95,16 +108,43 @@ export default class KodrPane extends View {
     return panes().find((p) => p.pane === props()?.pane);
   }
 
+  // Keeps Terminal | Chat true to what runs: is this terminal (or, in a chat pane, its agent) still a Claude?
+  // Ended (SessionEnd) or gone (killed or crashed inside a shell, which herdr keeps calling claude-code: the shell is
+  // in front again and feed/kodr-alive.mjs finds no Claude under it). A chat whose Claude is gone, or whose terminal
+  // closed, goes back to the terminal by itself, after two checks in a row (a reload can blink).
   check(cx) {
-    const t = this.me()?.terminal;
+    const p = this.me();
+    if (!p) return;
+    const chat = p.mod === CHAT;
+    const t = chat ? agentOf(p.pane)?.address : p.terminal;
+    if (chat && !t) return this.stale(p.pane, cx);
     if (!t) return;
     cx.spawn(async (cx) => {
       const s = await readTextFile(`${kodrHome()}/t/${t}/session.json`).catch(() => null);
       let ended = false;
       try { ended = Boolean(JSON.parse(s ?? "{}").ended); } catch {}
       const kodr = Boolean(s);
-      if (kodr !== this.kodr || ended !== this.ended) { this.kodr = kodr; this.ended = ended; cx.notify(); }
+      const claude = chat || p.app === "claude-code";
+      const gone = claude && !ended ? await this.gone(t) : false;
+      if (kodr !== this.kodr || ended !== this.ended || gone !== this.goneNow) { this.kodr = kodr; this.ended = ended; this.goneNow = gone; cx.notify(); }
+      if (chat && (ended || gone)) this.stale(p.pane, cx); else this.strikes = 0;
     });
+  }
+
+  async gone(t) {
+    try {
+      const info = JSON.parse((await hc(["get", t])).stdout || "{}");
+      const fg = info.foreground;
+      if (!fg || fg.pid !== info.pid || !SHELL.test(fg.name ?? "")) return false;
+      if (!this.config?.node) return false;
+      const r = await exec(this.config.node, [`${this.config.root}/feed/kodr-alive.mjs`, t], { timeout: 15_000 });
+      return Boolean(JSON.parse(r.stdout || "{}").gone);
+    } catch { return false; }
+  }
+
+  stale(pane, cx) {
+    this.strikes = (this.strikes ?? 0) + 1;
+    if (this.strikes >= 2 && !this.busy && Date.now() - this.born > 5000) { this.strikes = 0; this.toTerminal(pane, cx); }
   }
 
   // One app command, waited for: the swap's steps must happen in order.
@@ -199,12 +239,12 @@ export default class KodrPane extends View {
     const chat = p.mod === CHAT;
     const agent = chat ? agentOf(p.pane) : null;
     const prog = agent?.program ?? p.program;
-    const name = chat && !agent ? "Chat" : p.mod === "kodr-review" ? "Review" : ((prog?.agent || prog?.shell) && prog.name) || titleOf(agent?.title ?? p.title) || prog?.name || "shell";
-    const st = agent ? (["working", "blocked", "done", "idle"].includes(agent.status) ? agent.status : null) : p.status;
+    const name = this.goneNow && !chat ? "shell" : chat && !agent ? "Chat" : p.mod === "kodr-review" ? "Review" : ((prog?.agent || prog?.shell) && prog.name) || titleOf(agent?.title ?? p.title) || prog?.name || "shell";
+    const st = this.goneNow ? null : agent ? (["working", "blocked", "done", "idle"].includes(agent.status) ? agent.status : null) : p.status;
     const cwd = agent ? (agent.foreground?.cwd ?? agent.cwd) : p.cwd;
-    const pic = icon(prog, 14, t.dim);
+    const pic = this.goneNow && !chat ? null : icon(prog, 14, t.dim);
     const pane = p.pane;
-    const swappable = chat ? Boolean(agent) : canChat(p, this.ended); // a chat with no live terminal, or a pane whose Claude ended, has nothing to switch to
+    const swappable = chat ? Boolean(agent) && !this.goneNow : canChat(p, this.ended || this.goneNow); // a chat with no live terminal, or a pane whose Claude ended, has nothing to switch to
     return h_flex().id(`kp-head-${pane}`).size_full().px(10).gap(8).items_center()
       .bg(t.chrome).border_b(1).border_color(t.border).text_size(12)
       .on_hover((hovered, cx) => { this.hovered = hovered; cx.notify(); })

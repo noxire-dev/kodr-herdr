@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { terminalDir, readJson, writeJson, tailLines, transcriptOf, claudeProcess } from "../lib/store.mjs";
 import { goalOf, attach } from "./kodr-crew.mjs";
+import { draftOf } from "../mod/kodr-chat/draft.js";
 
 const TAIL = 32 * 1024 * 1024, MAX_ROWS = 400, MAX_TEXT = 20_000, MAX_OUT = 2_000, MAX_DIFF = 80;
 const clip = (s, n) => (s.length > n ? s.slice(0, n) + "\n…" : s);
@@ -290,11 +291,11 @@ export function feed(t) {
 
   if (tasks.size) todos = [...tasks.values()].filter((x) => x.status !== "deleted");
   const latest = turns.at(-1) ?? null;
-  const { mode, live } = screen(t);
+  const { mode, live, draft } = screen(t);
   // The crew's report on a goal whose card is in this chat is already on that card: one copy.
   const carded = new Set(rows.filter((r) => r.kind === "crew").map((r) => r.goal));
   const shown = rows.filter((r) => !((r.type === "goal" || r.type === "stuck") && carded.has(r.goal)));
-  return { terminal: t, cwd: s.cwd, base: s.base, session: s.session, transcript: s.transcript, model, mode, live, reviewed, latest, todos, rows: shown.slice(-MAX_ROWS) };
+  return { terminal: t, cwd: s.cwd, base: s.base, session: s.session, transcript: s.transcript, model, mode, live, draft, reviewed, latest, todos, rows: shown.slice(-MAX_ROWS) };
 }
 
 // The permission mode Claude's status line shows right now (Shift+Tab cycles it); null while a
@@ -317,8 +318,10 @@ export function readScreen(text) {
 
 function screen(t) {
   const hc = readJson(path.join(os.homedir(), ".kodr-herdr", "config.json"), {}).hc ?? process.env.KODR_HC ?? "hc";
-  try { return readScreen(execFileSync(hc, ["read", t], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })); }
-  catch { return { mode: null, live: null }; }
+  try {
+    const text = execFileSync(hc, ["read", t], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    return { ...readScreen(text), draft: Boolean(draftOf(text).text) }; // unsent text in the terminal: the chat takes it
+  } catch { return { mode: null, live: null, draft: false }; }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

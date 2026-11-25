@@ -1,11 +1,11 @@
 // Preview: the dev servers running in herdr's terminals (feed/kodr-ports.mjs), this space's first.
-// Enter opens one in Deft, a new tab in the browser the agent drives through Deft's tools, so you and the
-// agent look at the same page; Ctrl+Enter (or Browser) opens it in the default browser instead. Without Deft
-// installed, Enter opens the default browser and there's no Deft button. ↑/↓ pick,
+// Enter opens one in a Browser pane (herdr-browser, browser/) beside the focused pane, a page agents can drive over CDP;
+// Deft opens it in the browser the agent drives through Deft's tools (only when Deft is installed); Ctrl+Enter
+// (or Browser) opens it in the default browser. ↑/↓ pick,
 // Esc leaves. Rescans every 4 s while open. Opened with Ctrl+Shift+U (mod.open:kodr-preview).
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { spaces, exec, theme, props, closeOverlay, home, readTextFile, checking } from "herdr";
+import { spaces, exec, theme, props, closeOverlay, home, readTextFile, checking, run } from "herdr";
 
 export default class Preview extends View {
   init(_props, cx) {
@@ -60,9 +60,11 @@ export default class Preview extends View {
     return out;
   }
 
-  open(s, browser, cx) {
+  // how: "pane" (a Browser pane), "deft", or "browser" (the default browser).
+  open(s, how, cx) {
     if (!s || this.opening) return;
-    if (browser || this.deft === false) { cx.open_url(s.url); return this.close(); }
+    if (how === "browser") { cx.open_url(s.url); return this.close(); }
+    if (how === "pane") { run("pane.split", { direction: "right", mod: "herdr-browser", props: { url: s.url, key: Date.now().toString(36) } }); return this.close(); }
     this.opening = s.port;
     this.note = null;
     cx.notify();
@@ -94,7 +96,7 @@ export default class Preview extends View {
       if (r.head) return div().id(`ph${i}`).px(10).pt(i ? 12 : 4).pb(4).text_size(11).font_semibold().text_color(t.dim).child(r.head);
       const s = r.s, on = s === sel, busy = this.opening === s.port;
       return h_flex().id(`p${s.port}`).mx(4).px(10).py(6).gap(10).items_center().rounded(4).cursor_pointer()
-        .hover((st) => st.bg(t.hover)).on_click((_e, cx) => this.open(s, false, cx))
+        .hover((st) => st.bg(t.hover)).on_click((_e, cx) => this.open(s, "pane", cx))
         .when(on, (el) => el.bg(t.selected))
         .child(svg("mods/kodr-preview/globe.svg").size(14).flex_none().text_color(on ? t.accent : t.dim))
         .child(v_flex().flex_1().min_w(0).gap(1)
@@ -102,15 +104,16 @@ export default class Preview extends View {
           .child(div().truncate().text_size(11.5).text_color(t.dim).child([`:${s.port}`, s.command, s.where].filter(Boolean).join(" · "))))
         .child(busy ? div().flex_none().text_size(11.5).text_color(t.working).child("Opening in Deft…")
           : h_flex().flex_none().gap(6)
-            .when(this.deft !== false, (el) => el.child(button(`pd${s.port}`, "Deft", (cx) => this.open(s, false, cx))))
-            .child(button(`pb${s.port}`, "Browser", (cx) => this.open(s, true, cx))));
+            .child(button(`pp${s.port}`, "Pane", (cx) => this.open(s, "pane", cx)))
+            .when(this.deft !== false, (el) => el.child(button(`pd${s.port}`, "Deft", (cx) => this.open(s, "deft", cx))))
+            .child(button(`pb${s.port}`, "Browser", (cx) => this.open(s, "browser", cx))));
     };
 
     return v_flex().id("preview").track_focus(this.handle).size_full().p(16).gap(10).bg(t.popover).text_size(13)
       .on_key_down((e, cx) => {
         if (e.key === "escape") return this.close();
         if (!picks.length) return;
-        if (e.key === "enter") this.open(sel, e.modifiers?.control || e.modifiers?.platform, cx);
+        if (e.key === "enter") this.open(sel, e.modifiers?.control || e.modifiers?.platform ? "browser" : "pane", cx);
         else if (e.key === "down") this.at = (this.at + 1) % picks.length;
         else if (e.key === "up") this.at = (this.at + picks.length - 1) % picks.length;
         else return;
@@ -125,7 +128,6 @@ export default class Preview extends View {
         ? div().px(10).py(8).text_size(12.5).text_color(this.error ? t.blocked : t.dim).child(message)
         : v_flex().id("p-list").flex_1().min_h(0).overflow_y_scroll().children(rows.map(row)))
       .when(Boolean(this.note || sel), (el) => el.child(div().text_size(11).text_color(this.note?.bad ? t.blocked : t.dim)
-        .child(this.note?.text ?? (this.deft === false ? "Enter opens it in your default browser"
-          : "Enter opens it in Deft, where the agent can see it too · Ctrl+Enter in your default browser"))));
+        .child(this.note?.text ?? "Enter opens it in a pane beside this one, where agents can drive it too · Ctrl+Enter in your default browser")));
   }
 }

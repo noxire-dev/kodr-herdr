@@ -81,6 +81,14 @@ function icon(p, size, color) {
   return p.tint ? svg(p.icon).size(size).flex_none().text_color(color) : image(p.icon).w(size).h(size).flex_none();
 }
 
+// Kodr: an agent shown as Chat (kodr-pane's switch labels its terminal with the chat's pane) opens in Chat: the view
+// last picked for it. Terminal closes the chat, so then it's the terminal.
+const chatOf = (address) => {
+  const p = terminals().find((x) => x.address === address)?.labels?.["kodr.chat"];
+  return p && panes().some((x) => x.pane === p) ? p : null;
+};
+const viewOf = (a) => chatOf(a.address) ?? a.pane;
+
 export default class Agents extends View {
   init(_props, cx) {
     if (props()?.sortMenu) return;
@@ -262,7 +270,9 @@ export default class Agents extends View {
     this.listed = new Map(list.map((a) => [a.address, a.status]));
     const all = terminals();
     this.migratePins(all);
-    const shown = focused()?.agent;
+    const f = focused();
+    // Kodr: a chat pane shows its agent too.
+    const shown = f?.agent ?? (f?.pane && terminals().find((x) => x.labels?.["kodr.chat"] === f.pane)?.address);
     const now = Date.now();
     this.track(list, now);
     // A kept sub-agent (one with a pane) is in agents() too: where a tree shows
@@ -346,7 +356,7 @@ export default class Agents extends View {
           .items_center()
           .gap(4)
           .hover((s) => s.bg(t.hover))
-          .on_click(() => run("pane.focus", { pane: a.pane }))
+          .on_click(() => run("pane.focus", { pane: viewOf(a) }))
           .child(div().flex_1().min_w(0).whitespace_nowrap().text_right().text_color(t.muted).child(String(i + 1)))
           .child(h_flex().w(14).flex_none().items_center().justify_center().child(this.status(t, a, true)));
       }
@@ -408,7 +418,7 @@ export default class Agents extends View {
           else if (this.hovered === a.address) this.hovered = null;
           cx.notify();
         })
-        .on_click(() => run("pane.focus", { pane: a.pane }))
+        .on_click(() => run("pane.focus", { pane: viewOf(a) }))
         .child(top)
         .when(Boolean(stage), (el) => el.child(stage));
     };

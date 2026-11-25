@@ -22,6 +22,12 @@ agent's work needs before you trust it:
   an agent works each one in its own worktree, a fresh reviewer checks it, and merges pass your gate. The goal shows
   in the chat as one live card with each ticket's round and current step, and ends with the crew's report.
 - **Preview**: the dev servers running in your terminals, one key to open them.
+- **Browser pane**: a browser inside herdr, with tabs, beside your terminal. `Ctrl+Shift+I` opens one, and so does
+  Ctrl-clicking a `localhost` link. Kodr's Claude drives it with built-in tools (`read_page` at about a third of
+  Playwright's tokens, click, type, tabs): its first browser call opens the pane, and you watch every tab it opens.
+  Playwright `connectOverCDP` works too.
+- **Sessions come back**: when Herdr loses its terminals (a reboot, a core update), it brings them back as plain shells.
+  Kodr resumes the Claude that was running in each one when Herdr starts.
 - **Notifications** (Windows): a desktop toast when a Claude needs you or finishes while you're elsewhere, per space.
 
 ![yap's crew in the chat: goals planning, waiting to start, and running, each ticket with its round and current step](docs/screenshots/crew-running.png)
@@ -42,7 +48,8 @@ Windows-only. Bug reports with `herdr-app status` output are welcome.
   - `gh` with [gh-rinai](https://github.com/noxire-dev/gh-rinai) for Mission's board, PRs and merges;
   - [yap](https://github.com/noxire-dev/yap), so the chat shows messages between sessions, and the chat's Claude can hand a
     goal to yap's crew (agents per ticket, review, merge), shown as a live card with the crew's report;
-  - Deft, the browser extension the agent drives (not published yet). Without it, Preview opens your default browser.
+  - Edge or Chrome, for the Browser pane (a page inside herdr that agents can drive over CDP). Windows always has Edge.
+    Claude's browser tools need Node 22 or newer.
 
 ## Install
 
@@ -82,6 +89,7 @@ and the chat.
 | `Ctrl+Shift+G` | Mission |
 | `Ctrl+Shift+H` | Past sessions, to resume one |
 | `Ctrl+Shift+U` | Preview |
+| `Ctrl+Shift+I` | Browser pane beside this one |
 
 Checks, in `.kodr/checks.json` at the repo root:
 
@@ -98,7 +106,10 @@ Every feature in detail, with command names for scripts and keys, is in [docs/re
 
 ## What Kodr writes where
 
-- `~/.kodr-herdr/`: per-terminal state (`t/<terminal>/`), `config.json`, `repos.json`, `mission.log`.
+- `~/.kodr-herdr/`: per-terminal state (`t/<terminal>/`), `config.json`, `repos.json` and `mission.log`.
+- `~/.herdr-browser/`: the Browser pane's Chromium profile (`profile/`) and `config.json`.
+- `~/.config/herdr-app/mods/herdr-browser-frames/`: the Browser pane's recent frames (up to 40 files per open pane, removed when it closes).
+- `~/.kodr-herdr/mcp.json`: the `herdr-browser` MCP server Kodr's Claude starts with.
 - Herdr's home: the mods, theme, layout, a `programs.json` entry and key bindings.
 - Your repos: checkpoint refs under `refs/kodr/`, and Mission's worktrees under Herdr's worktree folder.
 - `~/.claude/settings.json`: only with `--global`, backed up first.

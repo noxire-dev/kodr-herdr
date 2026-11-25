@@ -25,7 +25,15 @@ assert.deepEqual(live.asks.map((r) => r.id), ["c"]);
 assert.equal(summary(live, 12_000, true), "Working for 12s · 1 tool call");
 
 // A text that ends the transcript without an end row (Claude about to stop) isn't taken as the answer yet.
-assert.equal(turns([u("go"), say("ok")])[1].answer, null);
+assert.equal(turns([u("go"), say("ok")], true)[1].answer, null);
+// Over without an end row (Claude idle, or another message came): the last text is the answer, not hidden in the fold.
+assert.equal(turns([u("go"), tool("a"), say("Handed off.")])[1].answer.text, "Handed off.");
+assert.equal(turns([u("go"), say("first"), u("again"), say("second")], true)[1].answer.text, "first");
+// A steer: the Interrupted note sits before the message that interrupted, after the turn it ended.
+assert.deepEqual(turns([u("run"), tool("a"), u("steer"), { kind: "note", text: "Interrupted" }, say("ok"), end(1)]).map((x) => x.kind === "aside" ? x.row.text : x.kind === "user" ? x.row.text : x.kind),
+  ["run", "turn", "Interrupted", "steer", "turn"]);
+// Only thinking: "Thought for 4s".
+assert.equal(summary(turns([u("q"), { kind: "thinking", text: "h" }, say("a"), end(4000)])[1], 4000), "Thought for 4s");
 
 // yap and notes stand apart; a turn of nothing but an end row disappears; rows before any message make a turn.
 const mixed = turns([say("hello"), end(1000), u("x"), { kind: "note", text: "Interrupted" }, end(0)]);

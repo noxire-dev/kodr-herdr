@@ -77,6 +77,7 @@ Left to right, on a `#1c1d26` canvas with 1px `#131319` dividers and no system t
   - `Ctrl+Shift+R`: the review queue for this session.
   - `Ctrl+Shift+H`: past sessions to resume.
   - `Ctrl+Shift+U`: Preview, the dev servers in your terminals.
+  - `Ctrl+Shift+I`: a Browser pane beside the focused pane.
 - New chat rows fade in over 220ms. Running items pulse their dot's opacity on a 1.2s loop.
 
 ## Built from
@@ -91,6 +92,9 @@ Left to right, on a `#1c1d26` canvas with 1px `#131319` dividers and no system t
   - `kodr-chat` is the chat, with props `{terminal}`, opened through `pane.split {mod}`.
   - `kodr-mission` is the side panel.
   - `kodr-review`, `kodr-preview` and `kodr-sessions` are overlays and a tab.
+  - `herdr-browser` is a pane (`pane.split {mod}`, props `{url, key}`) and the layout's `link_handlers` entry for
+    localhost links. It starts a headless Edge/Chrome on CDP port 9333 and talks to it over `websocket`; each pane
+    is one Chromium window, its tabs the window's pages.
 - **Shipped mods used**: `workspace-chrome`, `spaces`, `files`, `changes`, `workspace-status`.
 - **`herdr` functions**: `panes`, `terminals`, `agents`, `spaces`, `props`, `theme`, `exec`, `hc`, `run`,
   `readTextFile`, `notify`, `nextCommand`, `shared` / `setShared`, `image`.

@@ -10,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { install as installBrowser, uninstall as uninstallBrowser, server as browserServer } from "../browser/install.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..").replace(/\\/g, "/");
 const home = path.join(os.homedir(), ".kodr-herdr");
@@ -33,10 +34,13 @@ const HOOKS = {
 };
 const isKodr = (entry) => (entry.hooks ?? []).some((h) => String(h.command ?? "").includes("kodr-hook.mjs"));
 const MODS = ["kodr-chat", "kodr-review", "kodr-pane", "kodr-sessions", "kodr-mission", "kodr-tabs", "kodr-preview", "kodr-agents"];
+// Kodr's own Browser pane before it became herdr-browser (browser/): removed on install and uninstall.
+const OLD_BROWSER = ["kodr-browser", "kodr-browser-frames"];
 const readJson = (file) => { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; } };
 
 // Out again: the hooks from Claude's settings (backed up), Kodr's mods, theme, layout, menu entry and keys from
-// herdr. Your own layouts, keys and programs stay; so does ~/.kodr-herdr (Kodr's state; delete it yourself).
+// herdr, and the Browser pane's headless Chromium. Your own layouts, keys and programs stay; so does ~/.kodr-herdr
+// (Kodr's state and the Browser pane's profile; delete it yourself).
 if (process.argv.includes("--uninstall")) {
   const file = path.join(os.homedir(), ".claude", "settings.json"), claude = readJson(file);
   if (claude && Object.values(claude.hooks ?? {}).some((list) => list.some(isKodr))) {
@@ -45,6 +49,8 @@ if (process.argv.includes("--uninstall")) {
     fs.writeFileSync(file, JSON.stringify({ ...claude, hooks }, null, 2));
   }
   for (const mod of MODS) fs.rmSync(path.join(app, "mods", mod), { recursive: true, force: true });
+  for (const old of OLD_BROWSER) fs.rmSync(path.join(app, "mods", old), { recursive: true, force: true });
+  uninstallBrowser({ mcp: false });
   fs.rmSync(path.join(app, "themes", "kodr-zed.json"), { force: true });
   fs.rmSync(path.join(app, "layouts", "kodr.json"), { force: true });
   const programs = readJson(path.join(app, "programs.json"));
@@ -82,12 +88,24 @@ fs.mkdirSync(home, { recursive: true });
 fs.writeFileSync(path.join(home, "claude-settings.json"), JSON.stringify(global ? {} : { hooks: HOOKS }, null, 2));
 // Bypass is offered in the mode menu (the Shift+Tab cycle) but never the default.
 const launch = ["claude", "--settings", path.join(home, "claude-settings.json").replace(/\\/g, "/"), "--allow-dangerously-skip-permissions"];
+// The Browser pane's MCP server (browser/browser.mjs --mcp). Its CDP client needs Node's global WebSocket (22+).
+const mcpFile = path.join(home, "mcp.json");
+if (typeof WebSocket === "function") {
+  fs.writeFileSync(mcpFile, JSON.stringify({ mcpServers: { "herdr-browser": browserServer() } }, null, 2));
+  launch.push("--mcp-config", mcpFile.replace(/\\/g, "/"));
+} else {
+  fs.rmSync(mcpFile, { force: true });
+  console.log(`Node ${process.versions.node} has no WebSocket: Kodr's Claude gets no herdr-browser tools. Node 22 or newer has.`);
+}
 fs.writeFileSync(path.join(home, "config.json"), JSON.stringify({ root, node, herdrApp: herdrApp.replace(/\\/g, "/"), hc: hc.replace(/\\/g, "/"), launch }, null, 2));
 for (const mod of MODS) {
   const to = path.join(app, "mods", mod);
   fs.rmSync(to, { recursive: true, force: true });
   fs.cpSync(path.join(root, "mod", mod), to, { recursive: true });
 }
+// The Browser pane is herdr-browser (browser/), which installs itself; Kodr's Claude gets its MCP server above.
+for (const old of OLD_BROWSER) fs.rmSync(path.join(app, "mods", old), { recursive: true, force: true });
+installBrowser({ mcp: false, quiet: true });
 fs.cpSync(path.join(root, "herdr", "themes", "kodr-zed.json"), path.join(app, "themes", "kodr-zed.json"));
 // The kodr layout is Kodr's own (main stays the person's): replaced on every install.
 fs.cpSync(path.join(root, "herdr", "layout-kodr.json"), path.join(app, "layouts", "kodr.json"));

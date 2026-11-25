@@ -5,6 +5,7 @@
     "ctrl-shift-m": "kodr-chat.modes",
     "ctrl-shift-h": "mod.open:kodr-sessions",
     "ctrl-shift-g": "kodr-pane.mission",
-    "ctrl-shift-u": "mod.open:kodr-preview"
+    "ctrl-shift-u": "mod.open:kodr-preview",
+    "ctrl-shift-i": "kodr-pane.browser"
   }
 }
